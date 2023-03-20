@@ -2,17 +2,20 @@ package main
 
 import (
 	"container/heap"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
 )
 
+// Order represents an order in the order book.
 type Order struct {
 	orderID  string
 	price    int
 	quantity int
 }
 
+// BuyHeap implements a max heap for buy orders, with the highest price on top.
 type BuyHeap []Order
 
 func (bh BuyHeap) Len() int           { return len(bh) }
@@ -31,6 +34,7 @@ func (bh *BuyHeap) Pop() interface{} {
 	return x
 }
 
+// SellHeap implements a min heap for sell orders, with the lowest price on top.
 type SellHeap []Order
 
 func (sh SellHeap) Len() int           { return len(sh) }
@@ -49,57 +53,77 @@ func (sh *SellHeap) Pop() interface{} {
 	return x
 }
 
+// OrderBook represents the order book, with a buy heap and a sell heap.
 type OrderBook struct {
 	buyHeap  BuyHeap
 	sellHeap SellHeap
 }
 
+// AddBuyOrder adds a buy order to the buy heap and returns the order ID.
 func (ob *OrderBook) AddBuyOrder(price, quantity int) string {
 	orderID := uuid.New().String()
 	heap.Push(&ob.buyHeap, Order{orderID, price, quantity})
 	return orderID
 }
 
+// AddSellOrder adds a sell order to the sell heap and returns the order ID.
 func (ob *OrderBook) AddSellOrder(price, quantity int) string {
 	orderID := uuid.New().String()
 	heap.Push(&ob.sellHeap, Order{orderID, price, quantity})
 	return orderID
 }
 
-func (ob *OrderBook) CancelBuyOrder(orderID string) {
+// CancelBuyOrder cancels a buy order with the given order ID from the buy heap.
+// Returns an error if the order is not found.
+func (ob *OrderBook) CancelBuyOrder(orderID string) error {
+	found := false
 	buyOrders := make([]Order, 0)
 	for len(ob.buyHeap) > 0 {
 		order := heap.Pop(&ob.buyHeap).(Order)
 		if order.orderID == orderID {
 			// found the order to cancel
+			found = true
 			break
 		} else {
 			buyOrders = append(buyOrders, order)
 		}
 	}
+	if !found {
+		return errors.New("order not found")
+	}
 	// add back the remaining buy orders to the buy heap
 	for _, order := range buyOrders {
 		heap.Push(&ob.buyHeap, order)
 	}
+	return nil
 }
 
-func (ob *OrderBook) CancelSellOrder(orderID string) {
+// CancelSellOrder cancels a sell order with the given order ID from the sell heap.
+// Returns an error if the order is not found.
+func (ob *OrderBook) CancelSellOrder(orderID string) error {
+	found := false
 	sellOrders := make([]Order, 0)
 	for len(ob.sellHeap) > 0 {
 		order := heap.Pop(&ob.sellHeap).(Order)
 		if order.orderID == orderID {
 			// found the order to cancel
+			found = true
 			break
 		} else {
 			sellOrders = append(sellOrders, order)
 		}
 	}
+	if !found {
+		return errors.New("order not found")
+	}
 	// add back the remaining sell orders to the sell heap
 	for _, order := range sellOrders {
 		heap.Push(&ob.sellHeap, order)
 	}
+	return nil
 }
 
+// MatchOrders matches the buy and sell orders in the order book and executes trades.
 func (ob *OrderBook) MatchOrders() {
 	for len(ob.buyHeap) > 0 && len(ob.sellHeap) > 0 {
 		bestBuy := ob.buyHeap[0]
@@ -126,6 +150,7 @@ func (ob *OrderBook) MatchOrders() {
 	}
 }
 
+// min returns the minimum of two integers.
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -141,15 +166,21 @@ func main() {
 	buyOrderID := orderBook.AddBuyOrder(10, 100)
 	orderBook.AddBuyOrder(12, 100)
 	orderBook.AddBuyOrder(11, 120)
+	orderBook.AddBuyOrder(13, 120)
 	sellOrderID1 := orderBook.AddSellOrder(12, 50)
 	orderBook.AddSellOrder(12, 70)
 	orderBook.AddSellOrder(11, 75)
+	orderBook.AddSellOrder(5, 75)
 
 	// cancel a buy order
-	orderBook.CancelBuyOrder(buyOrderID)
+	if err := orderBook.CancelBuyOrder(buyOrderID); err != nil {
+		fmt.Printf("Error cancelling buy order: %v\n", err)
+	}
 
 	// cancel a sell order
-	orderBook.CancelSellOrder(sellOrderID1)
+	if err := orderBook.CancelSellOrder(sellOrderID1); err != nil {
+		fmt.Printf("Error cancelling sell order: %v\n", err)
+	}
 
 	// match orders in the order book
 	orderBook.MatchOrders()
