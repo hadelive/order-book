@@ -12,6 +12,10 @@ To use the order book, simply create a new instance of the OrderBook struct and 
 
 ## TODO
 
-[] Save/restore the state of the order book
-[] Handle buy and sell events
-[] Save the order history
+- [ ] Save/restore the state of the order book
+- [ ] Handle buy and sell events
+- [ ] Save the order history
+
+## References
+
+- https://www.youtube.com/watch?v=dUMWMZmMsVE&ab_channel=TechDummiesNarendraL
