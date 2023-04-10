@@ -43,6 +43,17 @@ type OrderBook struct {
 	sellHeap OrderHeap
 }
 
+func NewOrderBook() OrderBook {
+	return OrderBook{
+		buyHeap: OrderHeap{
+			less: func(o1, o2 Order) bool { return o1.price > o2.price }, // use greater than for buy orders
+		},
+		sellHeap: OrderHeap{
+			less: func(o1, o2 Order) bool { return o1.price < o2.price }, // use less than for sell orders
+		},
+	}
+}
+
 // AddOrder adds an order to the heap and returns the order ID.
 func (h *OrderHeap) AddOrder(price, quantity int) string {
 	orderID := uuid.New().String()
@@ -60,6 +71,7 @@ func (h *OrderHeap) CancelOrder(orderID string) error {
 		if order.orderID == orderID {
 			// found the order to cancel
 			found = true
+			fmt.Println("Cancelling order with ID: ", order.orderID)
 			break
 		} else {
 			orders = append(orders, order)
@@ -83,7 +95,10 @@ func (ob *OrderBook) MatchOrders() {
 		if bestBuy.price >= bestSell.price {
 			tradePrice := bestSell.price
 			tradeQuantity := min(bestBuy.quantity, bestSell.quantity) // match the lowest quantity between the two orders
+			fmt.Printf("Best buy quantity %d\n", bestBuy.quantity)
+			fmt.Printf("Best sell quantity %d\n", bestSell.quantity)
 			fmt.Printf("Trade executed at price %d for quantity %d\n", tradePrice, tradeQuantity)
+			fmt.Printf("-----------------------------------------------------------\n")
 			if bestBuy.quantity > tradeQuantity {
 				ob.buyHeap.orders[0] = Order{bestBuy.orderID, bestBuy.price, bestBuy.quantity - tradeQuantity}
 				heap.Fix(&ob.buyHeap, 0)

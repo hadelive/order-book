@@ -2,46 +2,53 @@ package orderbook
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestOrderBook(t *testing.T) {
+	// set the random seed to the current time
+	rand.Seed(time.Now().UnixNano())
 	// create a new order book
-	orderBook := OrderBook{
-		buyHeap: OrderHeap{
-			less: func(o1, o2 Order) bool { return o1.price > o2.price }, // use greater than for buy orders
-		},
-		sellHeap: OrderHeap{
-			less: func(o1, o2 Order) bool { return o1.price < o2.price }, // use less than for sell orders
-		},
-	}
+	orderBook := NewOrderBook()
 
-	// add buy and sell orders to the order book
-	buyOrderID := orderBook.buyHeap.AddOrder(10, 100)
-	orderBook.buyHeap.AddOrder(12, 100)
-	orderBook.buyHeap.AddOrder(11, 120)
-	orderBook.buyHeap.AddOrder(13, 120)
+	// sample buy/sell orders
+	buyOrderID := orderBook.buyHeap.AddOrder(100, 100)
+	sellOrderID := orderBook.sellHeap.AddOrder(110, 100)
 
-	// Add sell orders to the order book
-	sellOrderID1 := orderBook.sellHeap.AddOrder(12, 50)
-	orderBook.sellHeap.AddOrder(12, 70)
-	orderBook.sellHeap.AddOrder(11, 75)
-	orderBook.sellHeap.AddOrder(5, 75)
+	// create a wait group to wait for all Goroutines to finish
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	// cancel a buy order
-	if err := orderBook.buyHeap.CancelOrder(buyOrderID); err != nil {
-		fmt.Printf("Error cancelling buy order: %v\n", err)
-	}
+	// Goroutines 1: continuosly add buy orders
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			fmt.Println("Adding buy orders...", i)
+			orderBook.buyHeap.AddOrder(100-i*10, i+1)
+			time.Sleep(time.Duration(rand.Intn(10)) * time.Microsecond)
+		}
+	}()
 
-	// cancel a sell order
-	if err := orderBook.sellHeap.CancelOrder(sellOrderID1); err != nil {
-		fmt.Printf("Error cancelling sell order: %v\n", err)
-	}
+	// Goroutines 2: continously add sell orders
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 5; i++ {
+			fmt.Println("Adding sell orders....", i)
+			orderBook.sellHeap.AddOrder(10+i*10, i*2+1)
+			time.Sleep(time.Duration(rand.Intn(10)) * time.Microsecond)
+		}
+	}()
 
-	// match orders in the order book
+	// wait for all Goroutines to finish
+	wg.Wait()
+
+	orderBook.buyHeap.CancelOrder(buyOrderID)
+	orderBook.sellHeap.CancelOrder(sellOrderID)
 	orderBook.MatchOrders()
 
-	// print out the remaining orders in the order book
 	fmt.Println("Buy orders:")
 	for _, order := range orderBook.buyHeap.orders {
 		fmt.Printf("%s: %d @ %d\n", order.orderID, order.quantity, order.price)
