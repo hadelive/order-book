@@ -15,8 +15,8 @@ func TestOrderBook(t *testing.T) {
 	orderBook := NewOrderBook()
 
 	// sample buy/sell orders
-	buyOrderID := orderBook.buyHeap.AddOrder(100, 100)
-	sellOrderID := orderBook.sellHeap.AddOrder(110, 100)
+	buyOrderID := orderBook.BuyHeap.AddOrder(100, 100)
+	sellOrderID := orderBook.SellHeap.AddOrder(110, 100)
 
 	// create a wait group to wait for all Goroutines to finish
 	var wg sync.WaitGroup
@@ -27,7 +27,7 @@ func TestOrderBook(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 5; i++ {
 			fmt.Println("Adding buy orders...", i)
-			orderBook.buyHeap.AddOrder(100-i*10, i+1)
+			orderBook.BuyHeap.AddOrder(100-i*10, i+1)
 			time.Sleep(time.Duration(rand.Intn(10)) * time.Microsecond)
 		}
 	}()
@@ -37,7 +37,7 @@ func TestOrderBook(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 5; i++ {
 			fmt.Println("Adding sell orders....", i)
-			orderBook.sellHeap.AddOrder(10+i*10, i*2+1)
+			orderBook.SellHeap.AddOrder(10+i*10, i*2+1)
 			time.Sleep(time.Duration(rand.Intn(10)) * time.Microsecond)
 		}
 	}()
@@ -45,16 +45,16 @@ func TestOrderBook(t *testing.T) {
 	// wait for all Goroutines to finish
 	wg.Wait()
 
-	orderBook.buyHeap.CancelOrder(buyOrderID)
-	orderBook.sellHeap.CancelOrder(sellOrderID)
+	orderBook.BuyHeap.CancelOrder(buyOrderID)
+	orderBook.SellHeap.CancelOrder(sellOrderID)
 	orderBook.MatchOrders()
 
 	fmt.Println("Buy orders:")
-	for _, order := range orderBook.buyHeap.orders {
+	for _, order := range orderBook.BuyHeap.orders {
 		fmt.Printf("%s: %d @ %d\n", order.orderID, order.quantity, order.price)
 	}
 	fmt.Println("Sell orders:")
-	for _, order := range orderBook.sellHeap.orders {
+	for _, order := range orderBook.SellHeap.orders {
 		fmt.Printf("%s: %d @ %d\n", order.orderID, order.quantity, order.price)
 	}
 }

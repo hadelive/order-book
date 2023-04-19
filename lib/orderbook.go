@@ -39,16 +39,16 @@ func (h *OrderHeap) Pop() interface{} {
 
 // OrderBook represents the order book, with a buy heap and a sell heap.
 type OrderBook struct {
-	buyHeap  OrderHeap
-	sellHeap OrderHeap
+	BuyHeap  OrderHeap
+	SellHeap OrderHeap
 }
 
 func NewOrderBook() OrderBook {
 	return OrderBook{
-		buyHeap: OrderHeap{
+		BuyHeap: OrderHeap{
 			less: func(o1, o2 Order) bool { return o1.price > o2.price }, // use greater than for buy orders
 		},
-		sellHeap: OrderHeap{
+		SellHeap: OrderHeap{
 			less: func(o1, o2 Order) bool { return o1.price < o2.price }, // use less than for sell orders
 		},
 	}
@@ -89,9 +89,9 @@ func (h *OrderHeap) CancelOrder(orderID string) error {
 
 // MatchOrders matches the buy and sell orders in the order book and executes trades.
 func (ob *OrderBook) MatchOrders() {
-	for len(ob.buyHeap.orders) > 0 && len(ob.sellHeap.orders) > 0 {
-		bestBuy := ob.buyHeap.orders[0]
-		bestSell := ob.sellHeap.orders[0]
+	for len(ob.BuyHeap.orders) > 0 && len(ob.SellHeap.orders) > 0 {
+		bestBuy := ob.BuyHeap.orders[0]
+		bestSell := ob.SellHeap.orders[0]
 		if bestBuy.price >= bestSell.price {
 			tradePrice := bestSell.price
 			tradeQuantity := min(bestBuy.quantity, bestSell.quantity) // match the lowest quantity between the two orders
@@ -100,16 +100,16 @@ func (ob *OrderBook) MatchOrders() {
 			fmt.Printf("Trade executed at price %d for quantity %d\n", tradePrice, tradeQuantity)
 			fmt.Printf("-----------------------------------------------------------\n")
 			if bestBuy.quantity > tradeQuantity {
-				ob.buyHeap.orders[0] = Order{bestBuy.orderID, bestBuy.price, bestBuy.quantity - tradeQuantity}
-				heap.Fix(&ob.buyHeap, 0)
+				ob.BuyHeap.orders[0] = Order{bestBuy.orderID, bestBuy.price, bestBuy.quantity - tradeQuantity}
+				heap.Fix(&ob.BuyHeap, 0)
 			} else {
-				heap.Pop(&ob.buyHeap)
+				heap.Pop(&ob.BuyHeap)
 			}
 			if bestSell.quantity > tradeQuantity {
-				ob.sellHeap.orders[0] = Order{bestSell.orderID, bestSell.price, bestSell.quantity - tradeQuantity}
-				heap.Fix(&ob.sellHeap, 0)
+				ob.SellHeap.orders[0] = Order{bestSell.orderID, bestSell.price, bestSell.quantity - tradeQuantity}
+				heap.Fix(&ob.SellHeap, 0)
 			} else {
-				heap.Pop(&ob.sellHeap)
+				heap.Pop(&ob.SellHeap)
 			}
 		} else {
 			break
