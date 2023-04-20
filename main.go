@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"strconv"
 
 	lib "github.com/hadelive/order-book/lib"
 )
@@ -14,27 +13,28 @@ func main() {
 
 	// Define the HTTP endpoints and handlers
 	http.HandleFunc("/addOrder", func(w http.ResponseWriter, r *http.Request) {
-		priceStr := r.URL.Query().Get("price")
-		quantityStr := r.URL.Query().Get("quantity")
-
-		price, err := strconv.Atoi(priceStr)
-		if err != nil {
-			http.Error(w, "Invalid price", http.StatusBadRequest)
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		quantity, err := strconv.Atoi(quantityStr)
-		if err != nil {
-			http.Error(w, "Invalid quantity", http.StatusBadRequest)
+		var req struct {
+			Price    int    `json:"price"`
+			Quantity int    `json:"quantity"`
+			Side     string `json:"side"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
 			return
 		}
 
+		defer r.Body.Close()
 		var orderID string
-		side := r.URL.Query().Get("side")
-		if side == "buy" {
-			orderID = orderBook.BuyHeap.AddOrder(price, quantity)
-		} else if side == "sell" {
-			orderID = orderBook.SellHeap.AddOrder(price, quantity)
+		if req.Side == "buy" {
+			orderID = orderBook.BuyHeap.AddOrder(req.Price, req.Quantity)
+		} else if req.Side == "sell" {
+			orderID = orderBook.SellHeap.AddOrder(req.Price, req.Quantity)
 		} else {
 			http.Error(w, "Invalid side", http.StatusBadRequest)
 			return
@@ -49,6 +49,8 @@ func main() {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
+
+		orderBook.MatchOrders()
 
 		w.Header().Set("Content-type", "application/json")
 		w.Write(jsonResponse)
