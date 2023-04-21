@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -54,6 +55,35 @@ func main() {
 
 		w.Header().Set("Content-type", "application/json")
 		w.Write(jsonResponse)
+	})
+
+	http.HandleFunc("/cancelOrder", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			OrderID string `json:"order_id"`
+			Side    string `json:"side"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Printf("Error decoding request body: %s", err)
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+
+		if req.Side == "buy" {
+			orderBook.BuyHeap.CancelOrder(req.OrderID)
+		} else if req.Side == "sell" {
+			orderBook.SellHeap.CancelOrder(req.OrderID)
+		} else {
+			http.Error(w, "Invalid side", http.StatusBadRequest)
+			return
+		}
+
+		fmt.Fprintf(w, "Order %s canceled successfully", req.OrderID)
 	})
 
 	// Start the HTTP server
