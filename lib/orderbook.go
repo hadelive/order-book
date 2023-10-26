@@ -4,40 +4,8 @@ import (
 	"container/heap"
 	"errors"
 	"fmt"
-
-	"github.com/google/uuid"
 )
 
-// Order represents an order in the order book.
-type Order struct {
-	orderID  string
-	price    int
-	quantity int
-}
-
-// OrderHeap implements a heap for orders, with the ordering determined by the Compare function.
-type OrderHeap struct {
-	orders []Order
-	less   func(o1, o2 Order) bool
-}
-
-func (h OrderHeap) Len() int           { return len(h.orders) }
-func (h OrderHeap) Less(i, j int) bool { return h.less(h.orders[i], h.orders[j]) }
-func (h OrderHeap) Swap(i, j int)      { h.orders[i], h.orders[j] = h.orders[j], h.orders[i] }
-
-func (h *OrderHeap) Push(x interface{}) {
-	h.orders = append(h.orders, x.(Order))
-}
-
-func (h *OrderHeap) Pop() interface{} {
-	old := h.orders
-	n := len(old)
-	x := old[n-1]
-	h.orders = old[0 : n-1]
-	return x
-}
-
-// OrderBook represents the order book, with a buy heap and a sell heap.
 type OrderBook struct {
 	BuyHeap  OrderHeap
 	SellHeap OrderHeap
@@ -46,81 +14,95 @@ type OrderBook struct {
 func NewOrderBook() OrderBook {
 	return OrderBook{
 		BuyHeap: OrderHeap{
-			less: func(o1, o2 Order) bool { return o1.price > o2.price }, // use greater than for buy orders
+			less: func(o1, o2 *Order) bool {
+				if o1.Price == o2.Price {
+					return o1.OrderID < o2.OrderID // prioritize older order if Prices are equal
+				}
+				return o1.Price > o2.Price // use greater than for buy orders
+			},
 		},
 		SellHeap: OrderHeap{
-			less: func(o1, o2 Order) bool { return o1.price < o2.price }, // use less than for sell orders
+			less: func(o1, o2 *Order) bool {
+				if o1.Price == o2.Price {
+					return o1.OrderID < o2.OrderID // prioritize older order if Prices are equal
+				}
+				return o1.Price < o2.Price // use less than for sell orders
+			},
 		},
 	}
 }
 
 // AddOrder adds an order to the heap and returns the order ID.
-func (h *OrderHeap) AddOrder(price, quantity int) string {
-	orderID := uuid.New().String()
-	heap.Push(h, Order{orderID, price, quantity})
-	return orderID
-}
+func (ob *OrderBook) AddOrder(order *Order) error {
+	if order.Quantity < 0 {
+		return errors.New("quantity must be positive")
+	}
 
-// CancelOrder cancels an order with the given order ID from the heap.
-// Returns an error if the order is not found.
-func (h *OrderHeap) CancelOrder(orderID string) error {
-	found := false
-	orders := make([]Order, 0)
-	for len(h.orders) > 0 {
-		order := heap.Pop(h).(Order)
-		if order.orderID == orderID {
-			// found the order to cancel
-			found = true
-			fmt.Println("Cancelling order with ID: ", order.orderID)
+	// Check if there are any matching orders in the opposite heap
+	oppositeHeap := &ob.SellHeap
+	if order.Side == Sell {
+		oppositeHeap = &ob.BuyHeap
+	}
+	for len(oppositeHeap.orders) > 0 {
+		oppositeOrder := oppositeHeap.orders[0]
+		if (order.Side == Buy && order.Price < oppositeOrder.Price) || (order.Side == Sell && order.Price > oppositeOrder.Price) {
 			break
-		} else {
-			orders = append(orders, order)
+		}
+		// Execute the trade
+		tradePrice := oppositeOrder.Price
+		tradeQuantity := min(order.Quantity, oppositeOrder.Quantity)
+		fmt.Printf("Trade executed at Price %d for Quantity %d\n", tradePrice, tradeQuantity)
+		fmt.Printf("-----------------------------------------------------------\n")
+		order.Quantity -= tradeQuantity
+		oppositeOrder.Quantity -= tradeQuantity
+		if oppositeOrder.Quantity == 0 {
+			heap.Pop(oppositeHeap)
+		}
+		if order.Quantity == 0 {
+			return nil
 		}
 	}
-	if !found {
-		return errors.New("order not found")
-	}
-	// add back the remaining orders to the heap
-	for _, order := range orders {
-		heap.Push(h, order)
+	if order.Quantity > 0 {
+		if order.Side == Buy {
+			heap.Push(&ob.BuyHeap, order)
+		} else {
+			heap.Push(&ob.SellHeap, order)
+		}
 	}
 	return nil
 }
 
-// MatchOrders matches the buy and sell orders in the order book and executes trades.
-func (ob *OrderBook) MatchOrders() {
-	for len(ob.BuyHeap.orders) > 0 && len(ob.SellHeap.orders) > 0 {
-		bestBuy := ob.BuyHeap.orders[0]
-		bestSell := ob.SellHeap.orders[0]
-		if bestBuy.price >= bestSell.price {
-			tradePrice := bestSell.price
-			tradeQuantity := min(bestBuy.quantity, bestSell.quantity) // match the lowest quantity between the two orders
-			fmt.Printf("Best buy quantity %d\n", bestBuy.quantity)
-			fmt.Printf("Best sell quantity %d\n", bestSell.quantity)
-			fmt.Printf("Trade executed at price %d for quantity %d\n", tradePrice, tradeQuantity)
-			fmt.Printf("-----------------------------------------------------------\n")
-			if bestBuy.quantity > tradeQuantity {
-				ob.BuyHeap.orders[0] = Order{bestBuy.orderID, bestBuy.price, bestBuy.quantity - tradeQuantity}
-				heap.Fix(&ob.BuyHeap, 0)
-			} else {
-				heap.Pop(&ob.BuyHeap)
-			}
-			if bestSell.quantity > tradeQuantity {
-				ob.SellHeap.orders[0] = Order{bestSell.orderID, bestSell.price, bestSell.quantity - tradeQuantity}
-				heap.Fix(&ob.SellHeap, 0)
-			} else {
-				heap.Pop(&ob.SellHeap)
-			}
-		} else {
+// CancelOrder cancels the given order from the heap.
+// Returns an error if the order is not found.
+func (ob *OrderBook) CancelOrder(orderToCancel *Order) error {
+	var heapToSearch *OrderHeap
+
+	if orderToCancel.Side == Buy {
+		heapToSearch = &ob.BuyHeap
+	} else {
+		heapToSearch = &ob.SellHeap
+	}
+
+	// Find the index of the order to cancel in the heap
+	index := -1
+	for i, order := range heapToSearch.orders {
+		if order.OrderID == orderToCancel.OrderID {
+			index = i
 			break
 		}
 	}
-}
 
-// min returns the minimum of two integers.
-func min(a, b int) int {
-	if a < b {
-		return a
+	if index == -1 {
+		return errors.New("order not found")
 	}
-	return b
+
+	// Remove the order from the heap by swapping with the last order
+	lastIndex := len(heapToSearch.orders) - 1
+	heapToSearch.orders[index], heapToSearch.orders[lastIndex] = heapToSearch.orders[lastIndex], heapToSearch.orders[index]
+	heapToSearch.orders = heapToSearch.orders[:lastIndex]
+
+	// Heapify the heap after removing the order
+	heap.Init(heapToSearch)
+
+	return nil
 }
